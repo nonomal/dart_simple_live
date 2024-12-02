@@ -3,11 +3,40 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:brotli/brotli.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_core/src/common/convert_helper.dart';
 import 'package:simple_live_core/src/common/web_socket_util.dart';
 
 import '../common/binary_writer.dart';
+
+class BiliBiliDanmakuArgs {
+  final int roomId;
+  final String token;
+  final String buvid;
+  final String serverHost;
+  final int uid;
+  final String cookie;
+  BiliBiliDanmakuArgs({
+    required this.roomId,
+    required this.token,
+    required this.serverHost,
+    required this.buvid,
+    required this.uid,
+    required this.cookie,
+  });
+  @override
+  String toString() {
+    return json.encode({
+      "roomId": roomId,
+      "token": token,
+      "serverHost": serverHost,
+      "buvid": buvid,
+      "uid": uid,
+      "cookie": cookie,
+    });
+  }
+}
 
 class BiliBiliDanmaku implements LiveDanmaku {
   @override
@@ -20,21 +49,27 @@ class BiliBiliDanmaku implements LiveDanmaku {
   @override
   Function()? onReady;
 
-  String serverUrl = "wss://broadcastlv.chat.bilibili.com/sub";
+  //String serverUrl = "wss://broadcastlv.chat.bilibili.com/sub";
 
   WebScoketUtils? webScoketUtils;
-
+  late BiliBiliDanmakuArgs danmakuArgs;
   @override
   Future start(dynamic args) async {
+    danmakuArgs = args as BiliBiliDanmakuArgs;
     webScoketUtils = WebScoketUtils(
-      url: serverUrl,
+      url: "wss://${args.serverHost}/sub",
       heartBeatTime: heartbeatTime,
+      headers: args.cookie.isEmpty
+          ? null
+          : {
+              "cookie": args.cookie,
+            },
       onMessage: (e) {
         decodeMessage(e);
       },
       onReady: () {
         onReady?.call();
-        joinRoom(args);
+        joinRoom(danmakuArgs);
       },
       onHeartBeat: () {
         heartbeat();
@@ -49,11 +84,16 @@ class BiliBiliDanmaku implements LiveDanmaku {
     webScoketUtils?.connect();
   }
 
-  void joinRoom(args) {
+  void joinRoom(BiliBiliDanmakuArgs args) {
     var joinData = encodeData(
       json.encode({
-        "roomid": args,
-        "uid": 0,
+        "uid": args.uid,
+        "roomid": args.roomId,
+        "protover": 3,
+        "buvid": args.buvid,
+        "platform": "web",
+        "type": 2,
+        "key": args.token,
       }),
       7,
     );
@@ -126,6 +166,8 @@ class BiliBiliDanmaku implements LiveDanmaku {
       } else if (operation == 5) {
         if (protocolVersion == 2) {
           body = zlib.decode(body);
+        } else if (protocolVersion == 3) {
+          body = brotli.decode(body);
         }
 
         var text = utf8.decode(body, allowMalformed: true);

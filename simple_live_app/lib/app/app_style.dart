@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -20,6 +22,8 @@ class AppStyle {
   static ThemeData lightTheme = ThemeData(
     colorScheme: AppColors.lightColorScheme,
     useMaterial3: true,
+    fontFamily: Platform.isWindows ? "Microsoft YaHei" : null,
+    visualDensity: VisualDensity.standard,
     appBarTheme: AppBarTheme(
       //elevation: 0,
       centerTitle: true,
@@ -57,7 +61,13 @@ class AppStyle {
 
   static ThemeData darkTheme = ThemeData.dark().copyWith(
     colorScheme: AppColors.darkColorScheme,
-    useMaterial3: true,
+    visualDensity: VisualDensity.standard,
+    textTheme: ThemeData.dark().textTheme.apply(
+          fontFamily: Platform.isWindows ? "Microsoft YaHei" : null,
+        ),
+    primaryTextTheme: ThemeData().textTheme.apply(
+          fontFamily: Platform.isWindows ? "Microsoft YaHei" : null,
+        ),
     appBarTheme: AppBarTheme(
       //elevation: 0,
 
@@ -189,4 +199,12 @@ class AppStyle {
   /// 底部导航条的高度
   static double get bottomBarHeight =>
       MediaQuery.of(Get.context!).padding.bottom;
+
+  static Divider get divider => Divider(
+        height: 1,
+        thickness: 1,
+        indent: 16,
+        endIndent: 16,
+        color: Colors.grey.withOpacity(.1),
+      );
 }

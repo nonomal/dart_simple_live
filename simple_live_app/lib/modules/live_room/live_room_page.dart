@@ -1,12 +1,27 @@
+import 'dart:io';
+
+import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:get/get.dart';
-import 'package:ns_danmaku/ns_danmaku.dart';
+import 'package:lottie/lottie.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
+import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
+import 'package:simple_live_app/services/follow_service.dart';
+import 'package:simple_live_app/widgets/desktop_refresh_button.dart';
+import 'package:simple_live_app/widgets/follow_user_item.dart';
+import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
+import 'package:simple_live_app/widgets/settings/settings_action.dart';
+import 'package:simple_live_app/widgets/settings/settings_card.dart';
+import 'package:simple_live_app/widgets/settings/settings_number.dart';
+import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
@@ -15,134 +30,112 @@ class LiveRoomPage extends GetView<LiveRoomController> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
+    final page = Obx(
       () {
-        if (controller.fullScreen.value) {
-          return WillPopScope(
-            onWillPop: () async {
-              controller.exitFull();
-              return false;
-            },
-            child: Scaffold(
-              body: buildFullPlayer(context),
-            ),
-          );
-        } else {
-          return buildOrientationUI();
-        }
-      },
-    );
-  }
-
-  Widget buildOrientationUI() {
-    return OrientationBuilder(
-      builder: (context, orientation) {
-        if (orientation == Orientation.portrait) {
+        if (controller.loadError.value) {
           return Scaffold(
             appBar: AppBar(
-              title: Obx(
-                () => Text(controller.detail.value?.title ?? "直播间"),
-              ),
-              actions: buildAppbarActions(context),
+              title: const Text("直播间加载失败"),
             ),
-            body: buildVerticalUI(context),
-          );
-        } else {
-          return Scaffold(
-            appBar: AppBar(
-              title: Obx(
-                () => Text(controller.detail.value?.title ?? "直播间"),
-              ),
-              actions: buildAppbarActions(context),
-            ),
-            body: Column(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Obx(
-                          () => buildPlayer(isPortrait: false),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 300,
-                        child: Column(
-                          children: [
-                            buildUserProfile(context),
-                            buildMessageArea(),
-                          ],
-                        ),
-                      ),
-                    ],
+            body: Padding(
+              padding: AppStyle.edgeInsetsA12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  LottieBuilder.asset(
+                    'assets/lotties/error.json',
+                    height: 140,
+                    repeat: false,
                   ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    border: Border(
-                      top: BorderSide(
-                        color: Colors.grey.withOpacity(.1),
-                      ),
-                    ),
+                  const Text(
+                    "直播间加载失败",
+                    textAlign: TextAlign.center,
                   ),
-                  padding: AppStyle.edgeInsetsV4.copyWith(
-                    bottom: AppStyle.bottomBarHeight + 4,
+                  AppStyle.vGap4,
+                  Text(
+                    controller.error?.toString() ?? "未知错误",
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                  child: Row(
+                  AppStyle.vGap4,
+                  Text(
+                    "${controller.rxSite.value.id} - ${controller.rxRoomId.value}",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       TextButton.icon(
-                        style: TextButton.styleFrom(
-                          textStyle: const TextStyle(fontSize: 14),
-                        ),
+                        onPressed: controller.copyErrorDetail,
+                        icon: const Icon(Remix.file_copy_line),
+                        label: const Text("复制信息"),
+                      ),
+                      TextButton.icon(
                         onPressed: controller.refreshRoom,
                         icon: const Icon(Remix.refresh_line),
                         label: const Text("刷新"),
                       ),
-                      Obx(
-                        () => controller.followed.value
-                            ? TextButton.icon(
-                                style: TextButton.styleFrom(
-                                  textStyle: const TextStyle(fontSize: 14),
-                                ),
-                                onPressed: controller.removeFollowUser,
-                                icon: const Icon(Remix.heart_fill),
-                                label: const Text("取消关注"),
-                              )
-                            : TextButton.icon(
-                                style: TextButton.styleFrom(
-                                  textStyle: const TextStyle(fontSize: 14),
-                                ),
-                                onPressed: controller.followUser,
-                                icon: const Icon(Remix.heart_line),
-                                label: const Text("关注"),
-                              ),
-                      ),
-                      const Expanded(child: Center()),
-                      TextButton.icon(
-                        style: TextButton.styleFrom(
-                          textStyle: const TextStyle(fontSize: 14),
-                        ),
-                        onPressed: controller.share,
-                        icon: const Icon(Remix.share_line),
-                        label: const Text("分享"),
-                      ),
                     ],
-                  ),
-                ),
-                //buildBottomActions(context),
-              ],
+                  )
+                ],
+              ),
             ),
           );
         }
+        if (controller.fullScreenState.value) {
+          return PopScope(
+            canPop: false,
+            onPopInvoked: (e) {
+              controller.exitFull();
+            },
+            child: Scaffold(
+              body: buildMediaPlayer(),
+            ),
+          );
+        } else {
+          return buildPageUI();
+        }
+      },
+    );
+    if (!Platform.isAndroid) {
+      return page;
+    }
+    return PiPSwitcher(
+      floating: controller.pip,
+      childWhenDisabled: page,
+      childWhenEnabled: buildMediaPlayer(),
+    );
+  }
+
+  Widget buildPageUI() {
+    return OrientationBuilder(
+      builder: (context, orientation) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Obx(
+              () => Text(controller.detail.value?.title ?? "直播间"),
+            ),
+            actions: buildAppbarActions(context),
+          ),
+          body: orientation == Orientation.portrait
+              ? buildPhoneUI(context)
+              : buildTabletUI(context),
+        );
       },
     );
   }
 
-  Widget buildVerticalUI(BuildContext context) {
+  Widget buildPhoneUI(BuildContext context) {
     return Column(
       children: [
-        Obx(() => buildPlayer()),
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: buildMediaPlayer(),
+        ),
         buildUserProfile(context),
         buildMessageArea(),
         buildBottomActions(context),
@@ -150,583 +143,138 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
-  Widget buildPlayer({bool isPortrait = true}) {
-    if (!controller.liveStatus.value) {
-      return Container(
-        alignment: Alignment.center,
-        color: Colors.black,
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Center(
-            child: Text(
-              controller.errorMsg.value.isEmpty
-                  ? "未开播"
-                  : controller.errorMsg.value,
-              style: const TextStyle(fontSize: 16, color: Colors.white),
-            ),
+  Widget buildTabletUI(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                child: buildMediaPlayer(),
+              ),
+              SizedBox(
+                width: 300,
+                child: Column(
+                  children: [
+                    buildUserProfile(context),
+                    buildMessageArea(),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      );
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            border: Border(
+              top: BorderSide(
+                color: Colors.grey.withOpacity(.1),
+              ),
+            ),
+          ),
+          padding: AppStyle.edgeInsetsV4.copyWith(
+            bottom: AppStyle.bottomBarHeight + 4,
+          ),
+          child: Row(
+            children: [
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  textStyle: const TextStyle(fontSize: 14),
+                ),
+                onPressed: controller.refreshRoom,
+                icon: const Icon(Remix.refresh_line),
+                label: const Text("刷新"),
+              ),
+              Obx(
+                () => controller.followed.value
+                    ? TextButton.icon(
+                        style: TextButton.styleFrom(
+                          textStyle: const TextStyle(fontSize: 14),
+                        ),
+                        onPressed: controller.removeFollowUser,
+                        icon: const Icon(Remix.heart_fill),
+                        label: const Text("取消关注"),
+                      )
+                    : TextButton.icon(
+                        style: TextButton.styleFrom(
+                          textStyle: const TextStyle(fontSize: 14),
+                        ),
+                        onPressed: controller.followUser,
+                        icon: const Icon(Remix.heart_line),
+                        label: const Text("关注"),
+                      ),
+              ),
+              const Expanded(child: Center()),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  textStyle: const TextStyle(fontSize: 14),
+                ),
+                onPressed: controller.share,
+                icon: const Icon(Remix.share_line),
+                label: const Text("分享"),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  textStyle: const TextStyle(fontSize: 14),
+                ),
+                onPressed: controller.copyUrl,
+                icon: const Icon(Remix.file_copy_line),
+                label: const Text("复制链接"),
+              ),
+            ],
+          ),
+        ),
+        //buildBottomActions(context),
+      ],
+    );
+  }
+
+  Widget buildMediaPlayer() {
+    var boxFit = BoxFit.contain;
+    double? aspectRatio;
+    if (AppSettingsController.instance.scaleMode.value == 0) {
+      boxFit = BoxFit.contain;
+    } else if (AppSettingsController.instance.scaleMode.value == 1) {
+      boxFit = BoxFit.fill;
+    } else if (AppSettingsController.instance.scaleMode.value == 2) {
+      boxFit = BoxFit.cover;
+    } else if (AppSettingsController.instance.scaleMode.value == 3) {
+      boxFit = BoxFit.contain;
+      aspectRatio = 16 / 9;
+    } else if (AppSettingsController.instance.scaleMode.value == 4) {
+      boxFit = BoxFit.contain;
+      aspectRatio = 4 / 3;
     }
     return Stack(
       children: [
-        Container(
-          alignment: Alignment.center,
-          color: Colors.black,
-          child: buildVlcPlayer(),
-        ),
-        Positioned.fill(
-          child: Obx(
-            () => Offstage(
-              offstage: !controller.playerLoadding.value,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          ),
-        ),
-        buildDanmuView(),
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: () {
-              controller.showControls.value = !controller.showControls.value;
-            },
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              color: Colors.transparent,
-            ),
-          ),
-        ),
-        Obx(
-          () => AnimatedPositioned(
-            left: 0,
-            right: 0,
-            bottom: controller.showControls.value ? 0 : -48,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black87,
-                  ],
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      controller.refreshRoom();
-                    },
-                    icon: const Icon(
-                      Remix.refresh_line,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Offstage(
-                    offstage: controller.enableDanmaku.value,
-                    child: IconButton(
-                      onPressed: () => controller.enableDanmaku.value =
-                          !controller.enableDanmaku.value,
-                      icon: const ImageIcon(
-                        AssetImage('assets/icons/icon_danmaku_open.png'),
-                        size: 24,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  Offstage(
-                    offstage: !controller.enableDanmaku.value,
-                    child: IconButton(
-                      onPressed: () => controller.enableDanmaku.value =
-                          !controller.enableDanmaku.value,
-                      icon: const ImageIcon(
-                        AssetImage('assets/icons/icon_danmaku_close.png'),
-                        size: 24,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      controller.showBottomDanmuSettings();
-                    },
-                    icon: const ImageIcon(
-                      AssetImage('assets/icons/icon_danmaku_setting.png'),
-                      size: 24,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Expanded(child: Center()),
-                  Offstage(
-                    offstage: isPortrait,
-                    child: TextButton(
-                      onPressed: () {
-                        controller.showQualites.value = true;
-                      },
-                      child: Text(
-                        controller.currentQuality == -1
-                            ? ""
-                            : controller
-                                .qualites[controller.currentQuality].quality,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 15),
-                      ),
-                    ),
-                  ),
-                  Offstage(
-                    offstage: isPortrait,
-                    child: TextButton(
-                      onPressed: () {
-                        controller.showLines.value = true;
-                      },
-                      child: Text(
-                        "线路${controller.currentUrl + 1}",
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 15),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      controller.setFull();
-                    },
-                    icon: const Icon(
-                      Remix.fullscreen_line,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget buildFullPlayer(BuildContext context) {
-    var padding = MediaQuery.of(context).padding;
-    return Stack(
-      children: [
-        Container(
-          alignment: Alignment.center,
-          color: Colors.black,
-          child: buildVlcPlayer(),
-        ),
-        Positioned.fill(
-          child: Obx(
-            () => Offstage(
-              offstage: !controller.playerLoadding.value,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          ),
-        ),
-        buildDanmuView(),
-        Positioned.fill(
-          child: GestureDetector(
-            onTap: () {
-              controller.showControls.value = !controller.showControls.value;
-              controller.showLines.value = false;
-              controller.showQualites.value = false;
-              controller.showDanmuSettings.value = false;
-            },
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              color: Colors.transparent,
-            ),
-          ),
-        ),
-
-        // 顶部
-        Obx(
-          () => AnimatedPositioned(
-            left: 0,
-            right: 0,
-            top: controller.showControls.value ? 0 : -48,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              height: 48,
-              padding: EdgeInsets.only(
-                left: padding.left + 12,
-                right: padding.right + 12,
-              ),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black87,
-                  ],
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: Get.back,
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(
-                    width: 12,
-                  ),
-                  Expanded(
-                    child: Text(
-                      "${controller.detail.value?.title} - ${controller.detail.value?.userName}",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-                  const SizedBox(
-                    width: 12,
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      controller.showDanmuSettings.value = true;
-                    },
-                    icon: const Icon(
-                      Icons.more_horiz,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // 底部
-        Obx(
-          () => AnimatedPositioned(
-            left: 0,
-            right: 0,
-            bottom: controller.showControls.value ? 0 : -80,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black87,
-                  ],
-                ),
-              ),
-              padding: EdgeInsets.only(
-                left: padding.left + 12,
-                right: padding.right + 12,
-                bottom: padding.bottom,
-              ),
-              child: Row(
-                children: [
-                  Offstage(
-                    offstage: controller.enableDanmaku.value,
-                    child: IconButton(
-                      onPressed: () => controller.enableDanmaku.value =
-                          !controller.enableDanmaku.value,
-                      icon: const ImageIcon(
-                        AssetImage('assets/icons/icon_danmaku_open.png'),
-                        size: 24,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  Offstage(
-                    offstage: !controller.enableDanmaku.value,
-                    child: IconButton(
-                      onPressed: () => controller.enableDanmaku.value =
-                          !controller.enableDanmaku.value,
-                      icon: const ImageIcon(
-                        AssetImage('assets/icons/icon_danmaku_close.png'),
-                        size: 24,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      controller.showDanmuSettings.value = true;
-                    },
-                    icon: const ImageIcon(
-                      AssetImage('assets/icons/icon_danmaku_setting.png'),
-                      size: 24,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Expanded(child: Center()),
-                  TextButton(
-                    onPressed: () {
-                      controller.showQualites.value = true;
-                    },
-                    child: Text(
-                      controller.qualites[controller.currentQuality].quality,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      controller.showLines.value = true;
-                    },
-                    child: Text(
-                      "线路${controller.currentUrl + 1}",
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      controller.exitFull();
-                    },
-                    icon: const Icon(
-                      Remix.fullscreen_exit_fill,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        //清晰度
-        Obx(
-          () => AnimatedPositioned(
-            right: controller.showQualites.value ? 0 : -200,
-            top: 0,
-            bottom: 0,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              width: 200,
-              color: Colors.grey.shade900,
-              padding: EdgeInsets.only(right: padding.right),
-              child: MediaQuery(
-                data: const MediaQueryData(padding: EdgeInsets.zero),
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: controller.qualites.length,
-                  itemBuilder: (_, i) {
-                    var item = controller.qualites[i];
-                    return ListTile(
-                      selected: controller.currentQuality == i,
-                      textColor: Colors.white,
-                      title: Text(
-                        item.quality,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                      minLeadingWidth: 16,
-                      onTap: () {
-                        controller.showQualites.value = false;
-                        controller.currentQuality = i;
-                        controller.getPlayUrl();
-                      },
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
-        //线路
-        Obx(
-          () => AnimatedPositioned(
-            right: controller.showLines.value ? 0 : -200,
-            top: 0,
-            bottom: 0,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              width: 200,
-              color: Colors.grey.shade900,
-              padding: EdgeInsets.only(right: padding.right),
-              child: MediaQuery(
-                data: const MediaQueryData(padding: EdgeInsets.zero),
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: controller.playUrls.length,
-                  itemBuilder: (_, i) {
-                    return ListTile(
-                      selected: controller.currentUrl == i,
-                      textColor: Colors.white,
-                      title: Text(
-                        "线路${i + 1}",
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                      minLeadingWidth: 16,
-                      onTap: () {
-                        controller.showLines.value = false;
-                        controller.currentUrl = i;
-                        controller.setPlayer();
-                      },
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
-        //设置
-        Obx(
-          () => AnimatedPositioned(
-            right: controller.showDanmuSettings.value ? 0 : -400,
-            top: 0,
-            bottom: 0,
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              width: 400,
-              color: Colors.grey.shade900,
-              padding: EdgeInsets.only(right: padding.right),
-              child: MediaQuery(
-                data: const MediaQueryData(padding: EdgeInsets.zero),
-                child: Obx(
-                  () => ListView(
-                    padding: AppStyle.edgeInsetsV12,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          "弹幕区域: ${(controller.settingsController.danmuArea.value * 100).toInt()}%",
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                      ),
-                      Slider(
-                        value: controller.settingsController.danmuArea.value,
-                        max: 1.0,
-                        min: 0.1,
-                        onChanged: (e) {
-                          controller.settingsController.setDanmuArea(e);
-                          controller.updateDanmuOption(
-                            controller.danmakuController?.option
-                                .copyWith(area: e),
-                          );
-                        },
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          "不透明度: ${(controller.settingsController.danmuOpacity.value * 100).toInt()}%",
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                      ),
-                      Slider(
-                        value: controller.settingsController.danmuOpacity.value,
-                        max: 1.0,
-                        min: 0.1,
-                        onChanged: (e) {
-                          controller.settingsController.setDanmuOpacity(e);
-                          controller.updateDanmuOption(
-                            controller.danmakuController?.option
-                                .copyWith(opacity: e),
-                          );
-                        },
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          "弹幕大小: ${(controller.settingsController.danmuSize.value).toInt()}",
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                      ),
-                      Slider(
-                        value: controller.settingsController.danmuSize.value,
-                        min: 8,
-                        max: 36,
-                        onChanged: (e) {
-                          controller.settingsController.setDanmuSize(e);
-                          controller.updateDanmuOption(
-                            controller.danmakuController?.option
-                                .copyWith(fontSize: e),
-                          );
-                        },
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          "弹幕速度: ${(controller.settingsController.danmuSpeed.value).toInt()} (越小越快)",
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                      ),
-                      Slider(
-                        value: controller.settingsController.danmuSpeed.value,
-                        min: 4,
-                        max: 20,
-                        onChanged: (e) {
-                          controller.settingsController.setDanmuSpeed(e);
-                          controller.updateDanmuOption(
-                            controller.danmakuController?.option
-                                .copyWith(duration: e),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget buildVlcPlayer() {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Container(
-        color: Colors.black,
-        child: Obx(
-          () {
-            if (controller.vlcPlayerController.value == null) {
-              return const Center(
-                child: Text(
-                  "正在加载信息",
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-              );
-            } else {
-              controller.vlcPlayer ??= VlcPlayer(
-                key: controller.globalPlayerKey,
-                controller: controller.vlcPlayerController.value!,
-                aspectRatio: 16 / 9,
-                placeholder: const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-              return controller.vlcPlayer!;
-            }
+        Video(
+          key: controller.globalPlayerKey,
+          controller: controller.videoController,
+          pauseUponEnteringBackgroundMode:
+              AppSettingsController.instance.playerAutoPause.value,
+          resumeUponEnteringForegroundMode:
+              AppSettingsController.instance.playerAutoPause.value,
+          controls: (state) {
+            return playerControls(state, controller);
           },
+          aspectRatio: aspectRatio,
+          fit: boxFit,
+          // 自己实现
+          wakelock: false,
         ),
-      ),
-    );
-  }
-
-  Widget buildDanmuView() {
-    controller.danmakuView ??= DanmakuView(
-      key: controller.globalDanmuKey,
-      createdController: controller.setDanmakuController,
-      option: DanmakuOption(
-        fontSize: 16,
-      ),
-    );
-    return Positioned.fill(
-      child: Obx(
-        () => Offstage(
-          offstage: !controller.enableDanmaku.value,
-          child: controller.danmakuView!,
+        Obx(
+          () => Visibility(
+            visible: !controller.liveStatus.value,
+            child: const Center(
+              child: Text(
+                "未开播",
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -879,7 +427,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   Widget buildMessageArea() {
     return Expanded(
       child: DefaultTabController(
-        length: 3,
+        length: controller.site.id == Constant.kBiliBili ? 4 : 3,
         child: Column(
           children: [
             TabBar(
@@ -890,14 +438,18 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 const Tab(
                   text: "聊天",
                 ),
-                Tab(
-                  child: Obx(
-                    () => Text(
-                      controller.superChats.isNotEmpty
-                          ? "醒目留言(${controller.superChats.length})"
-                          : "醒目留言",
+                if (controller.site.id == Constant.kBiliBili)
+                  Tab(
+                    child: Obx(
+                      () => Text(
+                        controller.superChats.isNotEmpty
+                            ? "SC(${controller.superChats.length})"
+                            : "SC",
+                      ),
                     ),
                   ),
+                const Tab(
+                  text: "关注",
                 ),
                 const Tab(
                   text: "设置",
@@ -908,32 +460,46 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               child: TabBarView(
                 children: [
                   Obx(
-                    () => ListView.builder(
-                      controller: controller.scrollController,
-                      padding: AppStyle.edgeInsetsA12,
-                      itemCount: controller.messages.length,
-                      itemBuilder: (_, i) {
-                        var item = controller.messages[i];
-                        return buildMessageItem(item);
-                      },
-                    ),
-                  ),
-                  Obx(
-                    () => ListView.separated(
-                      padding: AppStyle.edgeInsetsA12,
-                      itemCount: controller.superChats.length,
-                      separatorBuilder: (_, i) => AppStyle.vGap12,
-                      itemBuilder: (_, i) {
-                        var item = controller.superChats[i];
-                        return SuperChatCard(
-                          item,
-                          onExpire: () {
-                            controller.removeSuperChats();
+                    () => Stack(
+                      children: [
+                        ListView.separated(
+                          controller: controller.scrollController,
+                          separatorBuilder: (_, i) => Obx(
+                            () => SizedBox(
+                              // *2与原来的EdgeInsets.symmetric(vertical: )做兼容
+                              height: AppSettingsController
+                                      .instance.chatTextGap.value *
+                                  2,
+                            ),
+                          ),
+                          padding: AppStyle.edgeInsetsA12,
+                          itemCount: controller.messages.length,
+                          itemBuilder: (_, i) {
+                            var item = controller.messages[i];
+                            return buildMessageItem(item);
                           },
-                        );
-                      },
+                        ),
+                        Visibility(
+                          visible: controller.disableAutoScroll.value,
+                          child: Positioned(
+                            right: 12,
+                            bottom: 12,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                controller.disableAutoScroll.value = false;
+                                controller.chatScrollToBottom();
+                              },
+                              icon: const Icon(Icons.expand_more),
+                              label: const Text("最新"),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (controller.site.id == Constant.kBiliBili)
+                    buildSuperChats(),
+                  buildFollowList(),
                   buildSettings(),
                 ],
               ),
@@ -947,81 +513,238 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   Widget buildMessageItem(LiveMessage message) {
     if (message.userName == "LiveSysMessage") {
       return Obx(
-        () => Container(
-          padding: EdgeInsets.symmetric(
-            vertical: controller.settingsController.chatTextGap.value,
-          ),
-          child: Text(
-            message.message,
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: controller.settingsController.chatTextSize.value,
-            ),
+        () => Text(
+          message.message,
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: AppSettingsController.instance.chatTextSize.value,
           ),
         ),
       );
     }
+
     return Obx(
-      () => Container(
-        padding: EdgeInsets.symmetric(
-          vertical: controller.settingsController.chatTextGap.value,
-        ),
-        child: Text.rich(
-          TextSpan(
-            text: "${message.userName}：",
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: controller.settingsController.chatTextSize.value,
-            ),
-            children: [
-              TextSpan(
-                text: message.message,
-                style: TextStyle(
-                  color: Get.isDarkMode ? Colors.white : AppColors.black333,
+      () => AppSettingsController.instance.chatBubbleStyle.value
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.withOpacity(.1),
+                      //borderRadius: AppStyle.radius8,
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(12),
+                        bottomLeft: Radius.circular(12),
+                        bottomRight: Radius.circular(12),
+                      ),
+                    ),
+                    padding:
+                        AppStyle.edgeInsetsA4.copyWith(left: 12, right: 12),
+                    child: Text.rich(
+                      TextSpan(
+                        text: "${message.userName}：",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize:
+                              AppSettingsController.instance.chatTextSize.value,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: message.message,
+                            style: TextStyle(
+                              color: Get.isDarkMode
+                                  ? Colors.white
+                                  : AppColors.black333,
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              )
-            ],
-          ),
+              ],
+            )
+          : Text.rich(
+              TextSpan(
+                text: "${message.userName}：",
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: AppSettingsController.instance.chatTextSize.value,
+                ),
+                children: [
+                  TextSpan(
+                    text: message.message,
+                    style: TextStyle(
+                      color: Get.isDarkMode ? Colors.white : AppColors.black333,
+                    ),
+                  )
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget buildSuperChats() {
+    return KeepAliveWrapper(
+      child: Obx(
+        () => ListView.separated(
+          padding: AppStyle.edgeInsetsA12,
+          itemCount: controller.superChats.length,
+          separatorBuilder: (_, i) => AppStyle.vGap12,
+          itemBuilder: (_, i) {
+            var item = controller.superChats[i];
+            return SuperChatCard(
+              item,
+              onExpire: () {
+                controller.removeSuperChats();
+              },
+            );
+          },
         ),
       ),
     );
   }
 
   Widget buildSettings() {
+    return ListView(
+      padding: AppStyle.edgeInsetsA12,
+      children: [
+        Obx(
+          () => Visibility(
+            visible: controller.autoExitEnable.value,
+            child: ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              visualDensity: VisualDensity.compact,
+              title: Text("${parseDuration(controller.countdown.value)}后自动关闭"),
+            ),
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12,
+          child: Text(
+            "聊天区",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Obx(
+                () => SettingsNumber(
+                  title: "文字大小",
+                  value:
+                      AppSettingsController.instance.chatTextSize.value.toInt(),
+                  min: 8,
+                  max: 36,
+                  onChanged: (e) {
+                    AppSettingsController.instance
+                        .setChatTextSize(e.toDouble());
+                  },
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsNumber(
+                  title: "上下间隔",
+                  value:
+                      AppSettingsController.instance.chatTextGap.value.toInt(),
+                  min: 0,
+                  max: 12,
+                  onChanged: (e) {
+                    AppSettingsController.instance.setChatTextGap(e.toDouble());
+                  },
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsSwitch(
+                  title: "气泡样式",
+                  value: AppSettingsController.instance.chatBubbleStyle.value,
+                  onChanged: (e) {
+                    AppSettingsController.instance.setChatBubbleStyle(e);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12,
+          child: Text(
+            "更多设置",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SettingsAction(
+                title: "关键词屏蔽",
+                onTap: controller.showDanmuShield,
+              ),
+              AppStyle.divider,
+              SettingsAction(
+                title: "弹幕设置",
+                onTap: controller.showDanmuSettingsSheet,
+              ),
+              AppStyle.divider,
+              SettingsAction(
+                title: "定时关闭",
+                onTap: controller.showAutoExitSheet,
+              ),
+              AppStyle.divider,
+              SettingsAction(
+                title: "画面尺寸",
+                onTap: controller.showPlayerSettingsSheet,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildFollowList() {
     return Obx(
-      () => ListView(
-        padding: AppStyle.edgeInsetsA12,
+      () => Stack(
         children: [
-          Padding(
-            padding: AppStyle.edgeInsetsH12.copyWith(top: 12),
-            child: Text(
-              "聊天区文字大小: ${(controller.settingsController.chatTextSize.value).toInt()}",
-              style: const TextStyle(fontSize: 14),
+          RefreshIndicator(
+            onRefresh: FollowService.instance.loadData,
+            child: ListView.builder(
+              itemCount: FollowService.instance.liveList.length,
+              itemBuilder: (_, i) {
+                var item = FollowService.instance.liveList[i];
+                return Obx(
+                  () => FollowUserItem(
+                    item: item,
+                    playing: controller.rxSite.value.id == item.siteId &&
+                        controller.rxRoomId.value == item.roomId,
+                    onTap: () {
+                      controller.resetRoom(
+                        Sites.allSites[item.siteId]!,
+                        item.roomId,
+                      );
+                    },
+                  ),
+                );
+              },
             ),
           ),
-          Slider(
-            value: controller.settingsController.chatTextSize.value,
-            min: 8,
-            max: 36,
-            onChanged: (e) {
-              controller.settingsController.setChatTextSize(e);
-            },
-          ),
-          Padding(
-            padding: AppStyle.edgeInsetsH12.copyWith(top: 12),
-            child: Text(
-              "聊天区上下间隔: ${(controller.settingsController.chatTextGap.value).toInt()}",
-              style: const TextStyle(fontSize: 14),
+          if (Platform.isLinux || Platform.isWindows || Platform.isMacOS)
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: Obx(
+                () => DesktopRefreshButton(
+                  refreshing: FollowService.instance.updating.value,
+                  onPressed: FollowService.instance.loadData,
+                ),
+              ),
             ),
-          ),
-          Slider(
-            value: controller.settingsController.chatTextGap.value,
-            min: 0,
-            max: 12,
-            onChanged: (e) {
-              controller.settingsController.setChatTextGap(e);
-            },
-          ),
         ],
       ),
     );
@@ -1031,10 +754,144 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     return [
       IconButton(
         onPressed: () {
-          controller.showMore();
+          showMore();
         },
         icon: const Icon(Icons.more_horiz),
       ),
     ];
+  }
+
+  void showMore() {
+    showModalBottomSheet(
+      context: Get.context!,
+      constraints: const BoxConstraints(
+        maxWidth: 600,
+      ),
+      isScrollControlled: true,
+      builder: (_) => Container(
+        padding: EdgeInsets.only(
+          bottom: AppStyle.bottomBarHeight,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text("刷新"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                controller.refreshRoom();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.play_circle_outline),
+              trailing: const Icon(Icons.chevron_right),
+              title: const Text("切换清晰度"),
+              onTap: () {
+                Get.back();
+                controller.showQualitySheet();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.switch_video_outlined),
+              title: const Text("切换线路"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.showPlayUrlsSheet();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.aspect_ratio_outlined),
+              title: const Text("画面尺寸"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.showPlayerSettingsSheet();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text("截图"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                controller.saveScreenshot();
+              },
+            ),
+            Visibility(
+              visible: Platform.isAndroid,
+              child: ListTile(
+                leading: const Icon(Icons.picture_in_picture),
+                title: const Text("小窗播放"),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Get.back();
+                  controller.enablePIP();
+                },
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text("定时关闭"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.showAutoExitSheet();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_sharp),
+              title: const Text("分享直播间"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.share();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text("复制链接"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.copyUrl();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.open_in_new),
+              title: const Text("APP中打开"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.openNaviteAPP();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded),
+              title: const Text("播放信息"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.showDebugInfo();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String parseDuration(int sec) {
+    // 转为时分秒
+    var h = sec ~/ 3600;
+    var m = (sec % 3600) ~/ 60;
+    var s = sec % 60;
+    if (h > 0) {
+      return "${h.toString().padLeft(2, '0')}小时${m.toString().padLeft(2, '0')}分钟${s.toString().padLeft(2, '0')}秒";
+    }
+    if (m > 0) {
+      return "${m.toString().padLeft(2, '0')}分钟${s.toString().padLeft(2, '0')}秒";
+    }
+    return "${s.toString().padLeft(2, '0')}秒";
   }
 }
