@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:simple_live_core/src/common/http_client.dart';
 import 'package:simple_live_core/src/danmaku/douyu_danmaku.dart';
 import 'package:simple_live_core/src/interface/live_danmaku.dart';
 import 'package:simple_live_core/src/interface/live_site.dart';
+import 'package:simple_live_core/src/model/live_anchor_item.dart';
 import 'package:simple_live_core/src/model/live_category.dart';
 import 'package:simple_live_core/src/model/live_message.dart';
 import 'package:simple_live_core/src/model/live_room_item.dart';
@@ -25,39 +28,34 @@ class DouyuSite implements LiveSite {
 
   @override
   Future<List<LiveCategory>> getCategores() async {
-    List<LiveCategory> categories = [
-      LiveCategory(id: "PCgame", name: "网游竞技", children: []),
-      LiveCategory(id: "djry", name: "单机热游", children: []),
-      LiveCategory(id: "syxx", name: "手游休闲", children: []),
-      LiveCategory(id: "yl", name: "娱乐天地", children: []),
-      LiveCategory(id: "yz", name: "颜值", children: []),
-      LiveCategory(id: "kjwh", name: "科技文化", children: []),
-      LiveCategory(id: "yp", name: "语言互动", children: []),
-    ];
-
-    for (var item in categories) {
-      var items = await getSubCategories(item.id);
-      item.children.addAll(items);
+    List<LiveCategory> categories = [];
+    var result =
+        await HttpClient.instance.getJson("https://m.douyu.com/api/cate/list");
+    var subCateList = result["data"]["cate2Info"] as List;
+    for (var item in result["data"]["cate1Info"]) {
+      var cate1Id = item["cate1Id"];
+      var cate1Name = item["cate1Name"];
+      List<LiveSubCategory> subCategories = [];
+      subCateList.where((x) => x["cate1Id"] == cate1Id).forEach((element) {
+        subCategories.add(LiveSubCategory(
+          pic: element["icon"],
+          id: element["cate2Id"].toString(),
+          parentId: cate1Id.toString(),
+          name: element["cate2Name"].toString(),
+        ));
+      });
+      categories.add(
+        LiveCategory(
+          id: cate1Id.toString(),
+          name: cate1Name.toString(),
+          children: subCategories,
+        ),
+      );
     }
+    // 根据ID排序
+    categories.sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
+
     return categories;
-  }
-
-  Future<List<LiveSubCategory>> getSubCategories(String id) async {
-    var result = await HttpClient.instance.getJson(
-        "https://www.douyu.com/japi/weblist/api/getC2List",
-        queryParameters: {"shortName": id, "offset": 0, "limit": 200});
-
-    List<LiveSubCategory> subs = [];
-    for (var item in result["data"]["list"]) {
-      subs.add(LiveSubCategory(
-        pic: item["squareIconUrlW"].toString(),
-        id: item["cid2"].toString(),
-        parentId: id,
-        name: item["cname2"].toString(),
-      ));
-    }
-
-    return subs;
   }
 
   @override
@@ -90,7 +88,7 @@ class DouyuSite implements LiveSite {
   Future<List<LivePlayQuality>> getPlayQualites(
       {required LiveRoomDetail detail}) async {
     var data = detail.data.toString();
-    data += "&cdn=&rate=0";
+    data += "&cdn=&rate=-1&ver=Douyu_223061205&iar=1&ive=1&hevc=0&fa=0";
     List<LivePlayQuality> qualities = [];
     var result = await HttpClient.instance.postJson(
       "https://www.douyu.com/lapi/live/getH5Play/${detail.roomId}",
@@ -102,6 +100,17 @@ class DouyuSite implements LiveSite {
     for (var item in result["data"]["cdnsWithName"]) {
       cdns.add(item["cdn"].toString());
     }
+
+    // 如果cdn以scdn开头，将其放到最后
+    cdns.sort((a, b) {
+      if (a.startsWith("scdn") && !b.startsWith("scdn")) {
+        return 1;
+      } else if (!a.startsWith("scdn") && b.startsWith("scdn")) {
+        return -1;
+      }
+      return 0;
+    });
+
     for (var item in result["data"]["multirates"]) {
       qualities.add(LivePlayQuality(
         quality: item["name"].toString(),
@@ -134,6 +143,11 @@ class DouyuSite implements LiveSite {
     var result = await HttpClient.instance.postJson(
       "https://www.douyu.com/lapi/live/getH5Play/$roomId",
       data: args,
+      header: {
+        'referer': 'https://www.douyu.com/$roomId',
+        'user-agent':
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.43"
+      },
       formUrlEncoded: true,
     );
 
@@ -167,37 +181,39 @@ class DouyuSite implements LiveSite {
 
   @override
   Future<LiveRoomDetail> getRoomDetail({required String roomId}) async {
-    var resultText = await HttpClient.instance.getText(
-        "https://www.douyu.com/$roomId",
+    Map roomInfo = await _getRoomInfo(roomId);
+
+    var jsEncResult = await HttpClient.instance.getText(
+        "https://www.douyu.com/swf_api/homeH5Enc?rids=$roomId",
         queryParameters: {},
-        header: {});
-    var resultJson = await HttpClient.instance
-        .getText("https://m.douyu.com/$roomId", queryParameters: {}, header: {
-      "user-agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1 Edg/91.0.4472.69",
-    });
-    var regExp = RegExp(r"\$ROOM.=.{(.*?)}", dotAll: true, multiLine: true);
-    var objStr = regExp.firstMatch(resultJson)?.group(1) ?? "";
-    var obj = json.decode("{$objStr}");
+        header: {
+          'referer': 'https://www.douyu.com/$roomId',
+          'user-agent':
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.43"
+        });
+    var crptext = json.decode(jsEncResult)["data"]["room$roomId"].toString();
 
     return LiveRoomDetail(
-      cover: obj["roomSrc"].toString(),
-      online: parseHotNum(obj["hn"].toString()),
-      roomId: obj["rid"].toString(),
-      title: obj["roomName"].toString(),
-      userName: obj["nickname"].toString(),
-      userAvatar: obj["avatar"].toString(),
-      introduction: "",
-      notice: obj["notice"].toString(),
-      status: obj["isLive"] == 1,
-      danmakuData: obj["rid"].toString(),
-      data: await getPlayArgs(resultText, obj["rid"].toString()),
+      cover: roomInfo["room_pic"].toString(),
+      online: int.tryParse(roomInfo["room_biz_all"]["hot"].toString()) ?? 0,
+      roomId: roomInfo["room_id"].toString(),
+      title: roomInfo["room_name"].toString(),
+      userName: roomInfo["owner_name"].toString(),
+      userAvatar: roomInfo["owner_avatar"].toString(),
+      introduction: roomInfo["show_details"].toString(),
+      notice: "",
+      status: roomInfo["show_status"] == 1 && roomInfo["videoLoop"] != 1,
+      danmakuData: roomInfo["room_id"].toString(),
+      data: await getPlayArgs(crptext, roomInfo["room_id"].toString()),
       url: "https://www.douyu.com/$roomId",
+      isRecord: roomInfo["videoLoop"] == 1,
     );
   }
 
   @override
-  Future<LiveSearchResult> search(String keyword, {int page = 1}) async {
+  Future<LiveSearchRoomResult> searchRooms(String keyword,
+      {int page = 1}) async {
+    var did = generateRandomString(32);
     var result = await HttpClient.instance.getJson(
       "https://www.douyu.com/japi/search/api/searchShow",
       queryParameters: {
@@ -205,8 +221,16 @@ class DouyuSite implements LiveSite {
         "page": page,
         "pageSize": 20,
       },
+      header: {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.51',
+        'referer': 'https://www.douyu.com/search/',
+        'Cookie': 'dy_did=$did;acf_did=$did'
+      },
     );
-
+    if (result['error'] != 0) {
+      throw Exception(result['msg']);
+    }
     var items = <LiveRoomItem>[];
     for (var item in result["data"]["relateShow"]) {
       var roomItem = LiveRoomItem(
@@ -219,13 +243,80 @@ class DouyuSite implements LiveSite {
       items.add(roomItem);
     }
     var hasMore = result["data"]["relateShow"].isNotEmpty;
-    return LiveSearchResult(hasMore: hasMore, items: items);
+    return LiveSearchRoomResult(hasMore: hasMore, items: items);
+  }
+
+  Future<Map> _getRoomInfo(String roomId) async {
+    var result = await HttpClient.instance.getJson(
+        "https://www.douyu.com/betard/$roomId",
+        queryParameters: {},
+        header: {
+          'referer': 'https://www.douyu.com/$roomId',
+          'user-agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.43',
+        });
+    Map roomInfo;
+    if (result is String) {
+      roomInfo = json.decode(result)["room"];
+    } else {
+      roomInfo = result["room"];
+    }
+    return roomInfo;
+  }
+
+  //生成指定长度的16进制随机字符串
+  String generateRandomString(int length) {
+    var random = Random.secure();
+    var values = List<int>.generate(length, (i) => random.nextInt(16));
+    StringBuffer stringBuffer = StringBuffer();
+    for (var item in values) {
+      stringBuffer.write(item.toRadixString(16));
+    }
+    return stringBuffer.toString();
+  }
+
+  @override
+  Future<LiveSearchAnchorResult> searchAnchors(String keyword,
+      {int page = 1}) async {
+    var did = generateRandomString(32);
+    var result = await HttpClient.instance.getJson(
+      "https://www.douyu.com/japi/search/api/searchUser",
+      queryParameters: {
+        "kw": keyword,
+        "page": page,
+        "pageSize": 20,
+        "filterType": 1,
+      },
+      header: {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1823.51',
+        'referer': 'https://www.douyu.com/search/',
+        'Cookie': 'dy_did=$did;acf_did=$did'
+      },
+    );
+
+    var items = <LiveAnchorItem>[];
+    for (var item in result["data"]["relateUser"]) {
+      var liveStatus =
+          (int.tryParse(item["anchorInfo"]["isLive"].toString()) ?? 0) == 1;
+      var roomType =
+          (int.tryParse(item["anchorInfo"]["roomType"].toString()) ?? 0);
+      var roomItem = LiveAnchorItem(
+        roomId: item["anchorInfo"]["rid"].toString(),
+        avatar: item["anchorInfo"]["avatar"].toString(),
+        userName: item["anchorInfo"]["nickName"].toString(),
+        liveStatus: liveStatus && roomType == 0,
+      );
+      items.add(roomItem);
+    }
+    var hasMore = result["data"]["relateUser"].isNotEmpty;
+    return LiveSearchAnchorResult(hasMore: hasMore, items: items);
   }
 
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
-    var detail = await getRoomDetail(roomId: roomId);
-    return detail.status;
+    var roomInfo = await _getRoomInfo(roomId);
+    return roomInfo["show_status"] == 1 && roomInfo["videoLoop"] != 1;
   }
 
   Future<String> getPlayArgs(String html, String rid) async {

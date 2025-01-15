@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class LiveRoomDetail {
   /// 房间ID
   final String roomId;
@@ -32,6 +34,9 @@ class LiveRoomDetail {
   /// 弹幕附加信息
   final dynamic danmakuData;
 
+  /// 是否录播
+  final bool isRecord;
+
   /// 链接
   final String url;
   LiveRoomDetail({
@@ -47,5 +52,25 @@ class LiveRoomDetail {
     this.data,
     this.danmakuData,
     required this.url,
+    this.isRecord = false,
   });
+
+  @override
+  String toString() {
+    return json.encode({
+      "roomId": roomId,
+      "title": title,
+      "cover": cover,
+      "userName": userName,
+      "userAvatar": userAvatar,
+      "online": online,
+      "introduction": introduction,
+      "notice": notice,
+      "status": status,
+      "data": data,
+      "danmakuData": danmakuData.toString(),
+      "url": url,
+      "isRecord": isRecord,
+    });
+  }
 }
